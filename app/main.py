@@ -37,23 +37,29 @@ dp.include_router(message_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup: Set webhook
+    # Startup: Try to set webhook (may fail without HTTPS)
     webhook_url = f"{config.WEBHOOK_URL}/webhook"
     logger.info(f"Setting webhook: {webhook_url}")
     
-    await bot.set_webhook(
-        url=webhook_url,
-        drop_pending_updates=True
-    )
-    
-    bot_info = await bot.get_me()
-    logger.info(f"Bot started: @{bot_info.username}")
+    try:
+        await bot.set_webhook(
+            url=webhook_url,
+            drop_pending_updates=True
+        )
+        bot_info = await bot.get_me()
+        logger.info(f"Bot started: @{bot_info.username}")
+    except Exception as e:
+        logger.warning(f"Webhook setup failed (HTTPS required): {e}")
+        logger.info("Bot will still respond to direct /webhook POST requests")
     
     yield
     
     # Shutdown: Delete webhook
     logger.info("Deleting webhook...")
-    await bot.delete_webhook()
+    try:
+        await bot.delete_webhook()
+    except Exception:
+        pass
     await bot.session.close()
 
 
