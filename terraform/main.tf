@@ -513,8 +513,8 @@ resource "aws_ecs_task_definition" "main" {
 
     environment = [
       { name = "BOT_TOKEN", value = var.bot_token },
-      { name = "GOOGLE_API_KEY", value = var.google_api_key },
-      { name = "WEBHOOK_URL", value = "https://${aws_cloudfront_distribution.main.domain_name}" }
+      { name = "RAPIDAPI_KEY", value = var.rapidapi_key },
+      { name = "WEBHOOK_URL", value = "https://${aws_cloudfront_distribution.main.domain_name}/webhook" }
     ]
 
     logConfiguration = {

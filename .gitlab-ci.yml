@@ -42,16 +42,17 @@ workflow:
 #===============================================================================
 # TEST STAGE - Merge Requests Only
 #===============================================================================
-test_code:
+test_bot:
   stage: test
-  image: python:3.11-slim
+  image: python:3.9-slim
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
   script:
-    - echo "🧪 Running syntax checks..."
+    - echo "🧪 Running Unit Tests..."
     - pip install --quiet -r app/requirements.txt
-    - python -m compileall app/
-    - echo "✅ All checks passed!"
+    - export PYTHONPATH=$PYTHONPATH:.
+    - pytest tests/
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
@@ -67,6 +68,8 @@ build_and_push:
   image: docker:24
   services:
     - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   # OIDC Token - GitLab generates this JWT for AWS authentication
@@ -81,21 +84,17 @@ build_and_push:
     # Install AWS CLI
     - apk add --no-cache aws-cli
     - echo "✅ OIDC authentication configured"
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URL%%/*}
   script:
-    - echo "🐳 Logging into Amazon ECR..."
-    - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URL%%/*}
-    
-    - echo "🔨 Building Docker image..."
-    - docker build --platform linux/amd64 -t ${ECR_REPOSITORY_URL}:${CI_COMMIT_SHA} -t ${ECR_REPOSITORY_URL}:latest ./app
-    
-    - echo "📤 Pushing to ECR..."
-    - docker push ${ECR_REPOSITORY_URL}:${CI_COMMIT_SHA}
+    - docker build -t ${ECR_REPOSITORY_URL}:$CI_COMMIT_SHA ./app
+    - docker tag ${ECR_REPOSITORY_URL}:$CI_COMMIT_SHA ${ECR_REPOSITORY_URL}:latest
+    - docker push ${ECR_REPOSITORY_URL}:$CI_COMMIT_SHA
     - docker push ${ECR_REPOSITORY_URL}:latest
-    
-    - echo "✅ Build and push completed!"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 
 #===============================================================================
-# DEPLOY STAGE - Main Branch Only
+# DEPLOY STAGE
 #===============================================================================
 deploy_ecs:
   stage: deploy
