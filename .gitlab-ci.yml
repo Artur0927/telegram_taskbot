@@ -17,6 +17,7 @@ stages:
 #-------------------------------------------------------------------------------
 variables:
   AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::577713924485:role/gitlab-ci-role
   ECS_CLUSTER_NAME: bot-cluster
   ECS_SERVICE_NAME: telegram-bot-service
   ECR_REPOSITORY_URL: 577713924485.dkr.ecr.us-east-1.amazonaws.com/telegram-bot
