@@ -69,7 +69,7 @@ build_and_push:
   services:
     - docker:24-dind
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_CERTDIR: ""
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   # OIDC Token - GitLab generates this JWT for AWS authentication
