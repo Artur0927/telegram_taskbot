@@ -33,6 +33,11 @@ output "nat_instance_public_ip" {
 }
 
 output "webhook_url" {
-  description = "Webhook URL for Telegram bot"
-  value       = "http://${aws_lb.main.dns_name}/webhook"
+  description = "Webhook URL for Telegram bot (HTTPS via CloudFront)"
+  value       = "https://${aws_cloudfront_distribution.main.domain_name}/webhook"
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name (HTTPS endpoint)"
+  value       = aws_cloudfront_distribution.main.domain_name
 }

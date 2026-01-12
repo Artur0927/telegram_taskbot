@@ -514,7 +514,7 @@ resource "aws_ecs_task_definition" "main" {
     environment = [
       { name = "BOT_TOKEN", value = var.bot_token },
       { name = "GOOGLE_API_KEY", value = var.google_api_key },
-      { name = "WEBHOOK_URL", value = "http://${aws_lb.main.dns_name}" }
+      { name = "WEBHOOK_URL", value = "https://${aws_cloudfront_distribution.main.domain_name}" }
     ]
 
     logConfiguration = {
@@ -700,4 +700,58 @@ resource "aws_iam_policy" "gitlab_s3_state" {
 resource "aws_iam_role_policy_attachment" "gitlab_s3_state" {
   role       = aws_iam_role.gitlab_ci.name
   policy_arn = aws_iam_policy.gitlab_s3_state.arn
+}
+
+#===============================================================================
+# CLOUDFRONT DISTRIBUTION (HTTPS for Telegram Webhook)
+#===============================================================================
+
+resource "aws_cloudfront_distribution" "main" {
+  enabled             = true
+  comment             = "${var.project_name} - HTTPS endpoint for Telegram webhook"
+  default_root_object = ""
+  price_class         = "PriceClass_100" # US/EU only - cheapest
+
+  origin {
+    domain_name = aws_lb.main.dns_name
+    origin_id   = "alb-origin"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "alb-origin"
+    viewer_protocol_policy = "redirect-to-https"
+
+    # Allow all methods for webhook POST requests
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
+
+    # Use CachingDisabled managed policy - critical for webhooks
+    cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+
+    # Forward all headers for proper request handling
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
+
+    compress = true
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-cloudfront"
+  }
 }

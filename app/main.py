@@ -37,7 +37,7 @@ dp.include_router(message_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup: Try to set webhook (may fail without HTTPS)
+    # Startup: Set webhook
     webhook_url = f"{config.WEBHOOK_URL}/webhook"
     logger.info(f"Setting webhook: {webhook_url}")
     
@@ -47,10 +47,11 @@ async def lifespan(app: FastAPI):
             drop_pending_updates=True
         )
         bot_info = await bot.get_me()
-        logger.info(f"Bot started: @{bot_info.username}")
+        logger.info(f"✅ Webhook set successfully!")
+        logger.info(f"🤖 Bot started: @{bot_info.username}")
     except Exception as e:
-        logger.warning(f"Webhook setup failed (HTTPS required): {e}")
-        logger.info("Bot will still respond to direct /webhook POST requests")
+        logger.error(f"❌ Webhook setup failed: {e}")
+        logger.warning("Bot will respond to direct /webhook POST requests only")
     
     yield
     
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     await bot.session.close()
+
 
 
 # FastAPI app
