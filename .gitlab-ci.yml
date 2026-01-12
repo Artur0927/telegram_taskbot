@@ -108,26 +108,14 @@ deploy_ecs:
       aud: https://gitlab.com
   before_script:
     - echo "🔐 Authenticating via OIDC..."
-    # Write OIDC token to file
     - echo "${GITLAB_OIDC_TOKEN}" > ${AWS_WEB_IDENTITY_TOKEN_FILE}
     - export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
     - echo "✅ OIDC authentication configured"
   script:
     - echo "🚀 Deploying to ECS..."
-    - |
-      aws ecs update-service \
-        --cluster ${ECS_CLUSTER_NAME} \
-        --service ${ECS_SERVICE_NAME} \
-        --force-new-deployment \
-        --region ${AWS_REGION}
-    
+    - aws ecs update-service --cluster ${ECS_CLUSTER_NAME} --service ${ECS_SERVICE_NAME} --force-new-deployment --region ${AWS_REGION}
     - echo "⏳ Waiting for deployment to stabilize..."
-    - |
-      aws ecs wait services-stable \
-        --cluster ${ECS_CLUSTER_NAME} \
-        --services ${ECS_SERVICE_NAME} \
-        --region ${AWS_REGION}
-    
+    - aws ecs wait services-stable --cluster ${ECS_CLUSTER_NAME} --services ${ECS_SERVICE_NAME} --region ${AWS_REGION}
     - echo "✅ Deployment completed successfully!"
   environment:
     name: production
