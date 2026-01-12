@@ -19,8 +19,8 @@ variable "project_name" {
 # Secrets (passed via TF_VAR_ or -var)
 #-------------------------------------------------------------------------------
 
-variable "google_api_key" {
-  description = "Google Gemini API Key"
+variable "rapidapi_key" {
+  description = "RapidAPI Key for GPT and Job Search"
   type        = string
   sensitive   = true
 }
