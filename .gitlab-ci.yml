@@ -51,7 +51,7 @@ test_bot:
   script:
     - echo "🧪 Running Unit Tests..."
     - pip install --quiet -r app/requirements.txt
-    - export PYTHONPATH=$PYTHONPATH:.
+    - export PYTHONPATH=$PYTHONPATH:./app
     - pytest tests/
   cache:
     key: ${CI_COMMIT_REF_SLUG}
