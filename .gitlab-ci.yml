@@ -1,0 +1,133 @@
+#===============================================================================
+# GITLAB CI/CD PIPELINE - AWS ECS DEPLOYMENT
+# Authentication: GitLab OIDC (NO LONG-TERM CREDENTIALS)
+#===============================================================================
+# Security: Uses OpenID Connect (OIDC) to assume IAM role without storing
+#           any AWS access keys. AWS CLI/SDK automatically reads the token
+#           from AWS_WEB_IDENTITY_TOKEN_FILE.
+#===============================================================================
+
+stages:
+  - test
+  - build
+  - deploy
+
+#-------------------------------------------------------------------------------
+# Global Variables
+#-------------------------------------------------------------------------------
+variables:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER_NAME: bot-cluster
+  ECS_SERVICE_NAME: telegram-bot-service
+  ECR_REPOSITORY_URL: 577713924485.dkr.ecr.us-east-1.amazonaws.com/telegram-bot
+  # OIDC Token Configuration
+  AWS_WEB_IDENTITY_TOKEN_FILE: /tmp/aws_oidc_token
+  AWS_ROLE_SESSION_NAME: GitLabCI-$CI_JOB_ID
+  # Docker Configuration
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
+#-------------------------------------------------------------------------------
+# Workflow Rules
+#-------------------------------------------------------------------------------
+workflow:
+  rules:
+    # Run on Merge Requests
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Run on main branch
+    - if: $CI_COMMIT_BRANCH == "main"
+
+#===============================================================================
+# TEST STAGE - Merge Requests Only
+#===============================================================================
+test_code:
+  stage: test
+  image: python:3.11-slim
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - echo "🧪 Running syntax checks..."
+    - pip install --quiet -r app/requirements.txt
+    - python -m compileall app/
+    - echo "✅ All checks passed!"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .cache/pip
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+#===============================================================================
+# BUILD STAGE - Main Branch Only
+#===============================================================================
+build_and_push:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  # OIDC Token - GitLab generates this JWT for AWS authentication
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    - echo "🔐 Authenticating via OIDC..."
+    # Write OIDC token to file for AWS CLI/SDK to use automatically
+    - echo "${GITLAB_OIDC_TOKEN}" > ${AWS_WEB_IDENTITY_TOKEN_FILE}
+    - export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
+    # Install AWS CLI
+    - apk add --no-cache aws-cli
+    - echo "✅ OIDC authentication configured"
+  script:
+    - echo "🐳 Logging into Amazon ECR..."
+    - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URL%%/*}
+    
+    - echo "🔨 Building Docker image..."
+    - docker build --platform linux/amd64 -t ${ECR_REPOSITORY_URL}:${CI_COMMIT_SHA} -t ${ECR_REPOSITORY_URL}:latest ./app
+    
+    - echo "📤 Pushing to ECR..."
+    - docker push ${ECR_REPOSITORY_URL}:${CI_COMMIT_SHA}
+    - docker push ${ECR_REPOSITORY_URL}:latest
+    
+    - echo "✅ Build and push completed!"
+
+#===============================================================================
+# DEPLOY STAGE - Main Branch Only
+#===============================================================================
+deploy_ecs:
+  stage: deploy
+  image: amazon/aws-cli:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  # OIDC Token
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    - echo "🔐 Authenticating via OIDC..."
+    # Write OIDC token to file
+    - echo "${GITLAB_OIDC_TOKEN}" > ${AWS_WEB_IDENTITY_TOKEN_FILE}
+    - export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
+    - echo "✅ OIDC authentication configured"
+  script:
+    - echo "🚀 Deploying to ECS..."
+    - |
+      aws ecs update-service \
+        --cluster ${ECS_CLUSTER_NAME} \
+        --service ${ECS_SERVICE_NAME} \
+        --force-new-deployment \
+        --region ${AWS_REGION}
+    
+    - echo "⏳ Waiting for deployment to stabilize..."
+    - |
+      aws ecs wait services-stable \
+        --cluster ${ECS_CLUSTER_NAME} \
+        --services ${ECS_SERVICE_NAME} \
+        --region ${AWS_REGION}
+    
+    - echo "✅ Deployment completed successfully!"
+  environment:
+    name: production
+    url: http://telegram-bot-alb-1715471783.us-east-1.elb.amazonaws.com
