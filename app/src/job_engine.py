@@ -14,13 +14,14 @@ async def search_jobs(role: str, location: str = "United States") -> str:
     if not RAPIDAPI_KEY:
         return "⚠️ Error: RAPIDAPI_KEY is missing. Please configure it."
 
-    url = f"https://{LINKEDIN_HOST}/search"
+    url = f"https://{LINKEDIN_HOST}/active-jb-24h"
     
     querystring = {
-        "query": f"{role} in {location}",
-        "page": "1",
-        "num_pages": "1",
-        "date_posted": "any_time"
+        "title_filter": role,
+        "location_filter": location,
+        "limit": "10",
+        "offset": "0",
+        "description_type": "text"
     }
 
     headers = {
@@ -39,14 +40,16 @@ async def search_jobs(role: str, location: str = "United States") -> str:
                 data = await response.json()
         
         # Adjust parsing based on actual API response structure
-        # Assuming typical response list
-        jobs = data if isinstance(data, list) else data.get("data", [])
-        jobs = jobs[:5]
+        # The user's snippet prints raw data. Usually it's a list or dict with 'data' key.
+        # Assuming list based on snippet usage "search" typically returning lists.
+        # Let's handle both just in case.
+        jobs = data.get("data", []) if isinstance(data, dict) else data
+        jobs = jobs[:5] if isinstance(jobs, list) else []
         
         if not jobs:
-            return f"No jobs found for *{role}* in *{location}*."
+            return f"No recently posted jobs found for *{role}* in *{location}*."
 
-        result = f"🔍 **Found Jobs for {role} in {location}:**\n\n"
+        result = f"🔍 **Found Active Jobs (24h) for {role} in {location}:**\n\n"
         for job in jobs:
             title = job.get("job_title", "Unknown Role")
             company = job.get("company_name", "Unknown Company")

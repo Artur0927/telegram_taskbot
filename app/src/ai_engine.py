@@ -6,7 +6,7 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
-GPT_HOST = "openai80.p.rapidapi.com"
+GPT_HOST = "cheapest-gpt-4-turbo-gpt-4-vision-chatgpt-openai-ai-api.p.rapidapi.com"
 
 async def generate_response(user_message: str) -> str:
     """
@@ -15,7 +15,7 @@ async def generate_response(user_message: str) -> str:
     if not RAPIDAPI_KEY:
         return "⚠️ I can't think right now (Missing RAPIDAPI_KEY)."
 
-    url = f"https://{GPT_HOST}/chat/completions"
+    url = f"https://{GPT_HOST}/v1/chat/completions"
     
     payload = {
         "model": "gpt-4o",
