@@ -1,21 +1,8 @@
-# ==============================================================================
-# .gitignore - Telegram Bot Platform
-# ==============================================================================
+# .gitignore for AWS SAM serverless project
 
-# Environment & Secrets
-.env
-.env.*
-*.tfvars
-*.tfvars.json
-
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfstate.backup
-.terraform.lock.hcl
-crash.log
-crash.*.log
+# AWS SAM
+.aws-sam/
+samconfig.toml
 
 # Python
 __pycache__/
@@ -23,19 +10,33 @@ __pycache__/
 *$py.class
 *.so
 .Python
-*.egg-info/
-.eggs/
-dist/
 build/
-.venv/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
 venv/
+env/
 ENV/
 
-# IDE
-.idea/
+# IDEs
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
@@ -44,3 +45,25 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Environment
+.env
+.env.local
+
+# Database (local only)
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated packages (do not commit)
+deployment-packages/
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

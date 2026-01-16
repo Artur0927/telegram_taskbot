@@ -1,0 +1,308 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Telegram To-Do Bot
+
+Parameters:
+  BotTokenSecretName:
+    Type: String
+    Default: telegram-bot-token
+    Description: Name of the secret in Secrets Manager containing the Telegram bot token
+  TasksTableName:
+    Type: String
+    Default: telegram-bot-tasks
+    Description: Name of existing DynamoDB tasks table
+  UsersTableName:
+    Type: String
+    Default: telegram-bot-user-settings
+    Description: Name of existing DynamoDB users table
+  MotivationTableName:
+    Type: String
+    Default: telegram-bot-motivational-messages
+    Description: Name of existing DynamoDB motivation table
+  AdminUserId:
+    Type: String
+    Default: '1685847131'
+    Description: Telegram User ID for Admin access
+
+Globals:
+  Function:
+    Tracing: Active
+    Runtime: python3.9
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        TASKS_TABLE_NAME: !Ref TasksTableName
+        USERS_TABLE_NAME: !Ref UsersTableName
+        MOTIVATION_TABLE_NAME: !Ref MotivationTableName
+        BOT_TOKEN_SECRET: !Ref BotTokenSecretName
+
+Resources:
+  WebhookHandlerFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ReminderHandlerFunction
+    Properties:
+      CodeUri: lambda/webhook_handler/
+      Handler: app.lambda_handler
+      Description: Handles Telegram webhook updates
+      Environment:
+        Variables:
+          REMINDER_LAMBDA_ARN: !GetAtt ReminderHandlerFunction.Arn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TasksTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MotivationTableName
+        - Statement:
+          - Sid: GetBotToken
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${BotTokenSecretName}*'
+          - Sid: ManageSchedules
+            Effect: Allow
+            Action:
+              - scheduler:CreateSchedule
+              - scheduler:DeleteSchedule
+              - scheduler:GetSchedule
+            Resource: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/reminder-*'
+          - Sid: PassRoleToScheduler
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*-EventBridgeSchedulerRole-*'
+      Events:
+        WebhookApi:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: POST
+            RestApiId: !Ref TelegramApi
+
+  ReminderHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/reminder_handler/
+      Handler: app.lambda_handler
+      Description: Sends reminders when triggered by EventBridge
+      Timeout: 10
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TasksTableName
+        - Statement:
+          - Sid: GetBotToken
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${BotTokenSecretName}*'
+          - Sid: DeleteSchedule
+            Effect: Allow
+            Action:
+              - scheduler:DeleteSchedule
+            Resource: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/reminder-*'
+
+  MotivationHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/motivation_handler/
+      Handler: app.lambda_handler
+      Description: Sends daily motivational messages
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MotivationTableName
+        - Statement:
+          - Sid: GetBotToken
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${BotTokenSecretName}*'
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 9 * * ? *)  # 9 AM UTC daily
+            Description: Daily motivation message trigger
+
+  # Mini App API
+  MiniappApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/miniapp_api/
+      Handler: app.lambda_handler
+      Description: REST API for Telegram Mini App
+      Timeout: 30
+      MemorySize: 256
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TasksTableName}'
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem  # For XP/Streak updates
+              - dynamodb:PutItem     # For new profiles
+              - dynamodb:Scan        # For Admin stats
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsersTableName}'
+        - Statement:
+          - Sid: GetBotToken
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${BotTokenSecretName}*'
+      Environment:
+        Variables:
+          ADMIN_USER_ID: !Ref AdminUserId
+      Events:
+        GetTasks:
+          Type: Api
+          Properties:
+            Path: /tasks
+            Method: GET
+            RestApiId: !Ref MiniappApi
+        CreateTask:
+          Type: Api
+          Properties:
+            Path: /tasks
+            Method: POST
+            RestApiId: !Ref MiniappApi
+        CompleteTask:
+          Type: Api
+          Properties:
+            Path: /tasks/{taskId}/complete
+            Method: PUT
+            RestApiId: !Ref MiniappApi
+        DeleteTask:
+          Type: Api
+          Properties:
+            Path: /tasks/{taskId}
+            Method: DELETE
+            RestApiId: !Ref MiniappApi
+        GetProfile:
+          Type: Api
+          Properties:
+            Path: /profile
+            Method: GET
+            RestApiId: !Ref MiniappApi
+        GetAdminStats:
+          Type: Api
+          Properties:
+            Path: /admin/stats
+            Method: GET
+            RestApiId: !Ref MiniappApi
+        Options:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: OPTIONS
+            RestApiId: !Ref MiniappApi
+
+  # AI Processor
+  AiProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/ai_processor/
+      Handler: app.lambda_handler
+      Description: Gemini AI integration for smart tasks
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          GEMINI_KEY_SECRET: gemini_api_key
+          USERS_TABLE_NAME: !Ref UsersTableName
+          AI_RATE_LIMIT: '10'
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:UpdateItem
+              - dynamodb:GetItem
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsersTableName}'
+        - Statement:
+          - Sid: GetGeminiKey
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:gemini_api_key*'
+      Events:
+        ParseTask:
+          Type: Api
+          Properties:
+            Path: /ai/parse-task
+            Method: POST
+            RestApiId: !Ref MiniappApi
+
+  # API Gateways
+  TelegramApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Description: Telegram webhook API
+
+  MiniappApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Description: Mini App REST API
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Telegram-Init-Data'"
+        AllowOrigin: "'*'"
+
+  # IAM Role for EventBridge Scheduler
+  EventBridgeSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeReminderLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt ReminderHandlerFunction.Arn
+
+Outputs:
+  WebhookUrl:
+    Description: Webhook URL for Telegram
+    Value: !Sub "https://${TelegramApi}.execute-api.${AWS::Region}.amazonaws.com/prod/webhook"
+    Export:
+      Name: TelegramBotWebhookUrl
+
+  WebhookHandlerFunctionArn:
+    Description: ARN of the webhook handler function
+    Value: !GetAtt WebhookHandlerFunction.Arn
+
+  ReminderHandlerFunctionArn:
+    Description: ARN of the reminder handler function
+    Value: !GetAtt ReminderHandlerFunction.Arn
+
+  TasksTableName:
+    Description: DynamoDB table name for tasks
+    Value: !Ref TasksTableName
+
+  MiniappApiUrl:
+    Description: Base URL for Mini App API
+    Value: !Sub "https://${MiniappApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Export:
+      Name: MiniappApiUrl

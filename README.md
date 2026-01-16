@@ -1,44 +1,120 @@
-# Telegram Bot on AWS ECS 🚀
+# Serverless Telegram To-Do Bot
 
-![Status](https://img.shields.io/badge/Status-Live-green)
-![CI/CD](https://gitlab.com/Artur0927/telegram-bot-aws/badges/main/pipeline.svg)
+Production-ready serverless Telegram bot powered by AWS Lambda, DynamoDB, and EventBridge.
 
-**Bot Username:** [@assistentv01Bot](https://t.me/assistentv01Bot)  
-**Webhook URL:** `https://dyqkwcu5hg4ug.cloudfront.net/webhook`  
+## Architecture
 
-A production-ready Telegram Bot platform deployed on AWS ECS (EC2 Launch Type) using Terraform and GitLab CI/CD.
+- **AWS Lambda** - Serverless compute (webhook handler, reminder handler, motivation handler)
+- **Amazon DynamoDB** - NoSQL database for tasks, user settings, and motivational messages
+- **Amazon API Gateway** - HTTP endpoint for Telegram webhooks
+- **Amazon EventBridge Scheduler** - One-time scheduled events for reminders
+- **AWS Secrets Manager** - Secure bot token storage
+- **AWS SAM** - Infrastructure as Code
 
-## 🏗 Architecture
+## Project Structure
 
-- **AWS ECS:** Orchestrates the Dockerized bot application on EC2 instances (`t3.micro`).
-- **AWS CloudFront:** Provides a free managed HTTPS endpoint for the Telegram Webhook.
-- **AWS ALB:** Internal load balancing.
-- **AWS ECR:** Stores Docker images.
-- **Terraform:** Infrastructure as Code (IaC) for reproducible deployments.
-- **GitLab CI:** Automated pipeline for Testing, Building, and Deploying.
-
-## 🚀 Features
-
-- **Zero-Trust Security:** OIDC Authentication (No long-lived AWS keys).
-- **Zero Cost (Free Tier):** Designed to fit within AWS Free Tier limits.
-- **HTTPS Webhook:** Secure communication with Telegram API.
-- **AI Powered:** Integrates with Google Gemini API.
-
-## 🛠 Commands
-
-**Local Development:**
-```bash
-pip install -r app/requirements.txt
-python app/main.py
+```
+telegram-bot-platform/
+├── template.yaml              # AWS SAM template
+├── lambda/
+│   ├── webhook_handler/       # Main Telegram webhook handler
+│   │   ├── app.py
+│   │   ├── requirements.txt
+│   │   └── handlers/
+│   ├── reminder_handler/      # EventBridge-triggered reminder sender
+│   │   ├── app.py
+│   │   └── requirements.txt
+│   └── motivation_handler/    # Daily motivation message sender
+│       ├── app.py
+│       └── requirements.txt
+├── scripts/
+│   ├── deploy.sh              # Automated deployment script
+│   └── set-webhook.sh         # Set Telegram webhook URL
+└── README.md
 ```
 
-**Terraform:**
+## Prerequisites
+
+- AWS CLI configured with credentials
+- AWS SAM CLI installed
+- AWS SAM CLI installed
+- Python 3.9
+- Telegram bot token from @BotFather
+- Node.js & NPM (for Mini App)
+
+## Features
+- **Smart Task Parsing**: Uses Gemini AI to extract tasks from natural language.
+- **Telegram Mini App**: Full React frontend for task management.
+- **Gamification**: XP, Levels, and Streaks system.
+- **Recurring Reminders**: Powered by EventBridge Scheduler.
+
+## Quick Start
+
+### 1. Store Bot Token
+
 ```bash
-cd terraform
-terraform apply
+aws secretsmanager create-secret \
+  --name telegram-bot-token \
+  --secret-string "YOUR_BOT_TOKEN_HERE" \
+  --region us-east-1
 ```
 
-**View Logs:**
+### 2. Build and Deploy
+
 ```bash
-aws logs tail /ecs/telegram-bot --follow
+# Build Lambda functions
+sam build
+
+# Deploy to AWS
+sam deploy --guided
 ```
+
+### 3. Set Telegram Webhook
+
+```bash
+# Get webhook URL from SAM outputs
+WEBHOOK_URL=$(aws cloudformation describe-stacks \
+  --stack-name telegram-bot-platform \
+  --query 'Stacks[0].Outputs[?OutputKey==`WebhookUrl`].OutputValue' \
+  --output text)
+
+# Set webhook
+./scripts/set-webhook.sh $WEBHOOK_URL
+```
+
+## Local Development
+
+Local testing is not applicable for this serverless architecture. Use AWS SAM local invoke for testing:
+
+```bash
+# Test webhook handler
+sam local invoke WebhookHandlerFunction -e events/test-message.json
+
+# Start local API
+sam local start-api
+```
+
+## Environment Variables
+
+All environment variables are managed through AWS SAM template:
+- `TASKS_TABLE_NAME` - DynamoDB table for tasks
+- `USERS_TABLE_NAME` - DynamoDB table for user settings
+- `MOTIVATION_TABLE_NAME` - DynamoDB table for motivational messages
+- `BOT_TOKEN_SECRET` - Secrets Manager secret name
+- `REMINDER_LAMBDA_ARN` - ARN of reminder handler Lambda
+
+## Cost Estimation
+
+- Lambda: ~$1-2/month (within free tier)
+- DynamoDB: ~$1/month
+- API Gateway: <$1/month (within free tier)
+- EventBridge: Minimal ($1 per million schedules)
+- **Total: ~$2-5/month**
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+
+## License
+
+MIT
