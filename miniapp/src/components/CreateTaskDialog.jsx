@@ -26,11 +26,22 @@ import CircularProgress from '@mui/material/CircularProgress'
 const Transition = (props) => <Slide direction="up" {...props} />
 
 const CreateTaskDialog = ({ open, onClose, onCreate }) => {
+    const getDefaultDateTime = () => {
+        const date = new Date(Date.now() + 3600000)
+        // Format to YYYY-MM-DDThh:mm for datetime-local input
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        return `${year}-${month}-${day}T${hours}:${minutes}`
+    }
+
     const [text, setText] = useState('')
     const [priority, setPriority] = useState('medium')
     const [tags, setTags] = useState([])
     const [tagInput, setTagInput] = useState('')
-    const [dateTime, setDateTime] = useState('')
+    const [dateTime, setDateTime] = useState(getDefaultDateTime())
     const [loading, setLoading] = useState(false)
 
     const handleCreate = async () => {
@@ -51,7 +62,7 @@ const CreateTaskDialog = ({ open, onClose, onCreate }) => {
             setText('')
             setPriority('medium')
             setTags([])
-            setDateTime('')
+            setDateTime(getDefaultDateTime())
         } finally {
             setLoading(false)
         }
@@ -70,11 +81,6 @@ const CreateTaskDialog = ({ open, onClose, onCreate }) => {
 
     const handleDeleteTag = (tagToDelete) => {
         setTags(tags.filter(tag => tag !== tagToDelete))
-    }
-
-    const getDefaultDateTime = () => {
-        const date = new Date(Date.now() + 3600000)
-        return date.toISOString().slice(0, 16)
     }
 
     const priorityConfig = {
@@ -268,7 +274,7 @@ const CreateTaskDialog = ({ open, onClose, onCreate }) => {
                     <TextField
                         label="Due Date & Time"
                         type="datetime-local"
-                        value={dateTime || getDefaultDateTime()}
+                        value={dateTime}
                         onChange={(e) => setDateTime(e.target.value)}
                         fullWidth
                         InputLabelProps={{ shrink: true }}

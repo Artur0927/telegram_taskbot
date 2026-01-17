@@ -41,6 +41,48 @@ handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
 logger.addHandler(handler)
 
+# Imports for validation
+import hashlib
+import hmac
+
+BOT_TOKEN_SECRET = os.environ.get('BOT_TOKEN_SECRET', 'telegram-bot-token')
+
+def get_bot_token() -> str:
+    """Get bot token from Secrets Manager"""
+    try:
+        response = secrets_client.get_secret_value(SecretId=BOT_TOKEN_SECRET)
+        return response['SecretString']
+    except Exception as e:
+        logger.error(f"Error getting bot token: {e}")
+        return ""
+
+def validate_telegram_auth(init_data: str) -> int:
+    """Validate Telegram WebApp initData and return user_id"""
+    try:
+        # Parse init_data
+        params = dict(p.split('=') for p in init_data.split('&') if '=' in p)
+
+        if 'hash' not in params:
+            return None
+
+        received_hash = params.pop('hash')
+        data_check_string = '\\n'.join(
+            f"{k}={params[k]}" for k in sorted(params.keys())
+        )
+
+        bot_token = get_bot_token()
+        secret_key = hmac.new(b'WebAppData', bot_token.encode(), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+        if calculated_hash == received_hash:
+            import urllib.parse
+            user_data = json.loads(urllib.parse.unquote(params.get('user', '{}')))
+            return user_data.get('id')
+        return None
+    except Exception as e:
+        logger.error(f"Auth validation error: {e}")
+        return None
+
 def get_api_key():
     """Retrieve API key from Secrets Manager"""
     try:
@@ -102,23 +144,27 @@ def lambda_handler(event, context):
         }
 
     try:
-        # 1. Parse User ID from headers (X-Telegram-Init-Data) logic usually happens in API GW authorized or client
-        # For this architecture, client sends it in body or we trust valid InitData. 
-        # But wait, AiProcessor is called from Frontend directly via API Gateway.
-        # We need to validate auth or iterate trust. 
-        # For MVP/Phase 2, we assume the API Gateway passes through, but to Rate Limit correctly we need the User ID.
-        # The frontend calls `fetch` with `body: { action, data: { text, userId } }`? 
-        # Let's check previous codebase or assume we parse it from body for now.
+        # 1. Secure Authentication
+        headers = event.get('headers', {}) or {}
+        init_data = headers.get('X-Telegram-Init-Data') or headers.get('x-telegram-init-data', '')
         
+        user_id = None
+        if init_data:
+            user_id = validate_telegram_auth(init_data)
+        
+        if not user_id:
+             # For MVP, maybe fail? Or allow limited anonymous? 
+             # Security Review says: "Every request is scoped by userId"
+             # So we must enforce it.
+             return {
+                'statusCode': 401,
+                'headers': { 'Access-Control-Allow-Origin': '*' },
+                'body': json.dumps({'error': 'Unauthorized'})
+            }
+
         body = json.loads(event.get('body', '{}'))
         action = body.get('action')
         data = body.get('data', {})
-        
-        # Extract User ID for Rate Limiting
-        # In a real secure app, we validate InitData here again.
-        # For now, we trust the `userId` in `data` or header if available.
-        # Let's try to get it from `data` as the frontend likely sends it.
-        user_id = data.get('userId')
         
         # 2. Rate Limit Check
         if user_id:

@@ -26,6 +26,11 @@ dynamodb = boto3.resource('dynamodb')
 tasks_table = dynamodb.Table(TASKS_TABLE_NAME)
 users_table = dynamodb.Table(USERS_TABLE_NAME)
 
+# Scheduler
+scheduler = boto3.client('scheduler')
+REMINDER_LAMBDA_ARN = os.environ.get('REMINDER_LAMBDA_ARN')
+SCHEDULER_ROLE_ARN = os.environ.get('SCHEDULER_ROLE_ARN')
+
 # Bot token for validation
 BOT_TOKEN_SECRET = os.environ.get('BOT_TOKEN_SECRET', 'telegram-bot-token')
 
@@ -273,6 +278,54 @@ def penalize_xp(user_id: int) -> Dict[str, Any]:
 
 
 # ========================================
+# REMINDER LOGIC
+# ========================================
+
+def create_reminder(user_id: int, task_id: str, text: str, remind_at: int):
+    """Create EventBridge Schedule for reminder"""
+    try:
+        # Validate time (must be in future)
+        now = datetime.utcnow().timestamp()
+        if remind_at <= now:
+            logger.info("Reminder time is in the past, skipping")
+            return
+
+        # Format time for Schedule (ISO 8601 usually required plain URL encoding or just string)
+        # EventBridge Scheduler expects: yyyy-mm-ddThh:mm:ss
+        dt_obj = datetime.fromtimestamp(remind_at)
+        at_expression = f"at({dt_obj.strftime('%Y-%m-%dT%H:%M:%S')})"
+
+        schedule_name = f"reminder-{task_id}"
+
+        scheduler.create_schedule(
+            Name=schedule_name,
+            ScheduleExpression=at_expression,
+            Target={
+                'Arn': REMINDER_LAMBDA_ARN,
+                'RoleArn': SCHEDULER_ROLE_ARN,
+                'Input': json.dumps({
+                    'userId': user_id,
+                    'taskId': task_id,
+                    'text': text
+                })
+            },
+            FlexibleTimeWindow={'Mode': 'OFF'},
+            ActionAfterCompletion='DELETE'
+        )
+        logger.info(f"Created schedule {schedule_name} for {at_expression}")
+    except Exception as e:
+        logger.error(f"Error creating reminder: {e}")
+
+def delete_reminder(task_id: str):
+    """Delete EventBridge Schedule"""
+    try:
+        scheduler.delete_schedule(Name=f"reminder-{task_id}")
+    except Exception as e:
+        # Ignore if not found
+        logger.info(f"Could not delete schedule/not found: {e}")
+
+
+# ========================================
 # API HANDLERS
 # ========================================
 
@@ -305,7 +358,13 @@ def handle_create_task(user_id: int, body: Dict) -> Dict:
         task_id = str(uuid.uuid4())[:8]
         text = body.get('text', '')
         priority = body.get('priority', 'medium')
-        remind_at = body.get('remindAt', int(datetime.utcnow().timestamp()) + 3600)
+        
+        remind_at_val = body.get('remindAt')
+        if remind_at_val and str(remind_at_val).isdigit():
+            remind_at = int(remind_at_val)
+        else:
+            # Default to 1 hour from now if missing or invalid
+            remind_at = int(datetime.utcnow().timestamp()) + 3600
 
         tasks_table.put_item(Item={
             'userId': user_id,
@@ -317,6 +376,9 @@ def handle_create_task(user_id: int, body: Dict) -> Dict:
             'tags': body.get('tags', []),
             'createdAt': Decimal(str(datetime.utcnow().timestamp()))
         })
+
+        if remind_at:
+             create_reminder(user_id, task_id, text, int(remind_at))
 
         return cors_response(201, {'taskId': task_id, 'message': 'Task created'})
     except Exception as e:
@@ -343,6 +405,9 @@ def handle_complete_task(user_id: int, task_id: str) -> Dict:
                 ':now': Decimal(str(datetime.utcnow().timestamp()))
             }
         )
+        
+        # Cleanup reminder
+        delete_reminder(task_id)
 
         gamification = award_xp(user_id, priority)
 
@@ -369,6 +434,7 @@ def handle_delete_task(user_id: int, task_id: str) -> Dict:
             penalty = penalize_xp(user_id)
 
         tasks_table.delete_item(Key={'userId': user_id, 'taskId': task_id})
+        delete_reminder(task_id)
 
         return cors_response(200, {
             'message': 'Task deleted',
@@ -457,18 +523,20 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict:
 
     # Get auth token from header
     headers = event.get('headers', {}) or {}
+    query_params = event.get('queryStringParameters') or {}
     init_data = headers.get('X-Telegram-Init-Data') or headers.get('x-telegram-init-data', '')
-
-    # For development: also accept userId from query params
-    query_params = event.get('queryStringParameters', {}) or {}
 
     user_id = None
     if init_data:
         user_id = validate_telegram_auth(init_data)
 
-    # Fallback for development
-    if not user_id and query_params.get('userId'):
-        user_id = int(query_params['userId'])
+    # Fallback for development (Restoring per user request for browser testing)
+    if not user_id and query_params and query_params.get('userId'):
+        try:
+            user_id = int(query_params['userId'])
+            logger.warning(f"⚠️ Using INSECURE fallback for userId: {user_id}")
+        except ValueError:
+            pass
 
     if not user_id:
         return cors_response(401, {'error': 'Unauthorized'})

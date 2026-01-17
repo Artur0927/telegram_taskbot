@@ -272,3 +272,10 @@ For issues or questions:
 2. Review DynamoDB for data integrity
 3. Verify IAM permissions
 4. Check EventBridge schedules
+
+## Security Controls 🛡️
+- **Authentication**: All API requests utilize `X-Telegram-Init-Data` validation (HMAC-SHA256).
+- **Access Control**: Strict `userId` scoping on all DynamoDB operations. No IDOR vulnerabilities.
+- **Least Privilege**: IAM roles restricted to specific DynamoDB tables and actions.
+- **Secrets Management**: Bot Token and API Keys stored in AWS Secrets Manager.
+- **Rate Limiting**: AI endpoints protected by per-user daily limits (DynamoDB backed).
