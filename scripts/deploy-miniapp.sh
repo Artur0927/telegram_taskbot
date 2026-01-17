@@ -27,11 +27,11 @@ aws s3api put-bucket-versioning \
   --bucket ${BUCKET_NAME} \
   --versioning-configuration Status=Enabled
 
-# Block public access
-aws s3api put-public-access-block \
-  --bucket ${BUCKET_NAME} \
-  --public-access-block-configuration \
-    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+# Block public access (Disabled to allow public read policy for static site)
+# aws s3api put-public-access-block \
+#   --bucket ${BUCKET_NAME} \
+#   --public-access-block-configuration \
+#     "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
 echo "✅ S3 bucket configured"
 

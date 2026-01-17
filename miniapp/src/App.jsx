@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import logo from './assets/logo.png'
 import { Box, Container, Tabs, Tab, AppBar, Typography, CircularProgress, Fab, Snackbar, Alert, Slide } from '@mui/material'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
@@ -12,6 +13,8 @@ import Calendar from './components/Calendar'
 import Profile from './components/Profile'
 import CreateTaskDialog from './components/CreateTaskDialog'
 import Onboarding from './components/Onboarding'
+import DailyInspiration from './components/DailyInspiration'
+import GameNotification from './components/GameNotification'
 import { useTelegram } from './hooks/useTelegram'
 import { useTasks } from './hooks/useTasks'
 
@@ -67,8 +70,9 @@ const triggerHaptic = (type = 'medium') => {
 function App() {
     const [activeTab, setActiveTab] = useState(0)
     const [createDialogOpen, setCreateDialogOpen] = useState(false)
-    const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' })
+    const [notification, setNotification] = useState({ open: false, message: '', type: 'success' }) // Type: success, error, info, exp
     const [showOnboarding, setShowOnboarding] = useState(false)
+    const [showInspiration, setShowInspiration] = useState(false)
     const [isRefreshing, setIsRefreshing] = useState(false)
 
     // Get auth state
@@ -82,6 +86,9 @@ function App() {
         const hasSeenOnboarding = localStorage.getItem('taskbot_onboarding_complete')
         if (!hasSeenOnboarding && !authLoading && userId) {
             setShowOnboarding(true)
+        } else if (userId && !authLoading) {
+            // Show daily inspiration on boot if onboarding is done
+            setShowInspiration(true)
         }
     }, [authLoading, userId])
 
@@ -102,8 +109,9 @@ function App() {
     }, [refreshTasks])
 
     // Notification handlers
-    const showNotification = (message, severity = 'success') => {
-        setNotification({ open: true, message, severity })
+    // Notification handlers
+    const showNotification = (message, type = 'success') => {
+        setNotification({ open: true, message, type })
     }
 
     const handleCompleteTask = async (taskId) => {
@@ -115,7 +123,7 @@ function App() {
                 const msg = isLevelUp
                     ? `🎉 +${result.xp_earned} XP! Level UP to ${result.new_level}!`
                     : `✅ +${result.xp_earned} XP earned!`
-                showNotification(msg, 'success')
+                showNotification(msg, 'exp')
                 triggerHaptic('success')
                 fireConfetti(isLevelUp)
 
@@ -239,7 +247,7 @@ function App() {
                                 whileHover={{ rotate: 5 }}
                                 whileTap={{ scale: 0.9 }}
                             >
-                                <img src="/taskbot-logo.png" alt="TaskBot" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+                                <img src={logo} alt="TaskBot" style={{ width: 40, height: 40, borderRadius: '50%' }} />
                             </motion.div>
                             <Box>
                                 <Typography variant="h6" color="text.primary">
@@ -367,28 +375,20 @@ function App() {
             </AppBar>
 
             {/* XP Notification */}
-            <Snackbar
+            {/* Daily Inspiration Modal */}
+            <DailyInspiration
+                open={showInspiration}
+                onClose={() => setShowInspiration(false)}
+            />
+
+            {/* Custom Game Notification */}
+            <GameNotification
                 open={notification.open}
-                autoHideDuration={3000}
+                message={notification.message}
+                type={notification.type}
                 onClose={() => setNotification({ ...notification, open: false })}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-                TransitionComponent={Slide}
-            >
-                <Alert
-                    severity={notification.severity}
-                    variant="filled"
-                    sx={{
-                        width: '100%',
-                        fontFamily: '"Inter", sans-serif',
-                        fontWeight: 600,
-                        borderRadius: 2,
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                    }}
-                    onClose={() => setNotification({ ...notification, open: false })}
-                >
-                    {notification.message}
-                </Alert>
-            </Snackbar>
+            />
+
         </Box>
     )
 }
