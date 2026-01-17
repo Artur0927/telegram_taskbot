@@ -120,9 +120,18 @@ All environment variables are managed through AWS SAM template:
 - EventBridge: Minimal ($1 per million schedules)
 - **Total: ~$2-5/month**
 
+## Continuous Integration & Deployment (CI/CD)
+
+This project uses a production-grade **GitHub Actions** pipeline for reliability and security.
+
+- **CI (`ci.yml`)**: Runs Linting (Ruff), Unit Tests (Pytest), and SAM Validation on every Pull Request.
+- **CD (`cd.yml`)**: Automatically deploys to AWS via OIDC authentication when changes are merged to `main`.
+
+For detailed setup instructions and architecture, see [README_CICD.md](README_CICD.md).
+
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+For manual deployment (dev/test), see [DEPLOYMENT.md](DEPLOYMENT.md). For production, rely on the automated pipeline.
 
 ## License
 
