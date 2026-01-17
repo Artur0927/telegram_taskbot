@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GitHub Actions OIDC Setup for Secure Deployments
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: Artur0927
+    Description: GitHub Organization or Username
+  RepoName:
+    Type: String
+    Default: telegram-bot-aws
+    Description: GitHub Repository Name
+  OIDCProviderUrl:
+    Type: String
+    Default: https://token.actions.githubusercontent.com
+  OIDCThumbprint:
+    Type: String
+    Default: 6938fd4d98bab03faadb97b34396831e3780aea1
+    Description: Thumbprint for token.actions.githubusercontent.com (valid until 2069?)
+
+Resources:
+  # 1. OIDC Identity Provider
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !Ref OIDCProviderUrl
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - !Ref OIDCThumbprint
+
+  # 2. Deployment Role
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GitHubDeployRole-TelegramBot
+      Description: Role for GitHub Actions to deploy the telegram bot
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepoName}:*
+
+      # Wide permissions for CloudFormation deployment
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  DeployRoleArn:
+    Description: ARN of the IAM Role to use in GitHub Secrets (AWS_DEPLOY_ROLE_ARN)
+    Value: !GetAtt GitHubDeployRole.Arn

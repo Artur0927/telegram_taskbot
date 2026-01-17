@@ -32,8 +32,8 @@ Add the following credentials in **Settings > Secrets and variables > Actions**:
 
 | Secret Name | Description |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | IAM User Key with `AdministratorAccess` (or scoped SAM permissions). |
-| `AWS_SECRET_ACCESS_KEY` | Secret Key for the above user. |
+
+| `AWS_DEPLOY_ROLE_ARN` | The IAM Role ARN for OIDC deployment: `arn:aws:iam::577713924485:role/GitHubDeployRole-TelegramBot` |
 
 *(Note: The `BOT_TOKEN_SECRET` and `GEMINI_API_KEY` are retrieved by Lambda at runtime from AWS Secrets Manager, not GitHub Secrets).*
 
