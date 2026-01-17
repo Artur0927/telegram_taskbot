@@ -8,7 +8,7 @@ Parameters:
     Description: GitHub Organization or Username
   RepoName:
     Type: String
-    Default: telegram-bot-aws
+    Default: telegram_taskbot
     Description: GitHub Repository Name
   OIDCProviderUrl:
     Type: String
