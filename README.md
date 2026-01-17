@@ -1,6 +1,14 @@
-# Serverless Telegram To-Do Bot
+# Serverless Telegram To-Do Bot (v1.0)
 
-Production-ready serverless Telegram bot powered by AWS Lambda, DynamoDB, and EventBridge.
+A production-grade, serverless task management bot for Telegram, powered by AWS Lambda and React.
+
+<p align="center">
+  <img src="docs/images/taskboard.png" width="45%" alt="Task Board UI">
+  <img src="docs/images/profile.png" width="45%" alt="Gamified Profile">
+</p>
+
+## Overview
+This project delivers a full-featured Mini App experience within Telegram. It combines a secure AWS Serverless backend with a polished React frontend, featuring gamification (XP, streaks), natural language processing for tasks, and motivational engagement tools.
 
 ## Architecture
 
@@ -37,16 +45,17 @@ telegram-bot-platform/
 
 - AWS CLI configured with credentials
 - AWS SAM CLI installed
-- AWS SAM CLI installed
 - Python 3.9
 - Telegram bot token from @BotFather
 - Node.js & NPM (for Mini App)
 
-## Features
-- **Smart Task Parsing**: Uses Gemini AI to extract tasks from natural language.
-- **Telegram Mini App**: Full React frontend for task management.
-- **Gamification**: XP, Levels, and Streaks system.
-- **Recurring Reminders**: Powered by EventBridge Scheduler.
+## Key Features
+- **📊 Interactive Mini App**: React-based UI with glassmorphism design, animations, and haptic feedback.
+- **🎮 Gamification System**: Earn XP, level up, unlock achievements, and maintain daily streaks.
+- **🧠 Natural Language AI**: Uses Gemini to intelligently parse "Buy milk tomorrow at 5pm" into structured data.
+- **🔔 Smart Notifications**: Recurring reminders (via EventBridge) and gamified in-app toasts.
+- **💪 Motivation Board**: Daily inspirational quotes on startup to boost engagement.
+- **🛡️ Enterprise Security**: Role-based access, signed webhook validation, and least-privilege IAM policies.
 
 ## Quick Start
 
